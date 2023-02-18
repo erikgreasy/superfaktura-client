@@ -10,6 +10,7 @@ class InvoiceItemDto
         public readonly ?string $description = null,
         public readonly float $quantity = 1,
         public readonly ?string $unit = null,
+        public readonly ?float $tax = null,
     )
     {
     }
@@ -21,6 +22,7 @@ class InvoiceItemDto
             'description' => $this->description,
             'unit_price' => $this->unitPrice,
             'unit' => $this->unit,
+            'tax' => $this->tax,
         ];
     }
 }
