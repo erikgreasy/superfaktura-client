@@ -2,100 +2,107 @@
 
 namespace Erikgreasy\Superfaktura;
 
-use Erikgreasy\Superfaktura\Dto\InvoiceDto;
-use Erikgreasy\Superfaktura\Responses\CreateInvoiceResponse;
-use Erikgreasy\Superfaktura\Responses\SendInvoiceResponse;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ClientException;
-use GuzzleHttp\Psr7\Response;
-use Psr\Http\Message\ResponseInterface;
+use Erikgreasy\Superfaktura\Enums\Language;
 
 class Superfaktura
 {
-    private string $sandboxUrl = 'https://sandbox.superfaktura.sk';
-    private string $prodUrl = 'https://moja.superfaktura.sk';
-    private string $module = '';
-    private Client $client;
+    private SuperfakturaClient $client;
 
     public function __construct(
-        private string $email, 
-        private string $apiKey, 
-        private bool $isSandbox = false
-    )
-    {
-        $this->client = new Client([
-            'headers' => [
-                'Authorization' => "SFAPI email={$this->email}&apikey={$this->apiKey}&module={$this->module}"
-            ]
-        ]);
+        string $email,
+        string $apiKey,
+        bool $isSandbox = false,
+        string $module = '',
+    ) {
+        $this->client = new SuperfakturaClient($email, $apiKey, $isSandbox, $module);
     }
 
-    public function baseUrl(): string
+    public function getInvoiceDetails(int $invoiceId): array
     {
-        if ($this->isSandbox) {
-            return $this->sandboxUrl;
-        }
+        $data = $this->client->get("/invoices/view/{$invoiceId}.json");
 
-        return $this->prodUrl;
+        return $data;
     }
 
-    public function post(string $url, array $data): ResponseInterface
+    public function createInvoice(array $invoiceData): array
     {
-        try {
-            return $this->client->post($this->baseUrl() . $url, [
-                'form_params' => [
-                    'data' => json_encode($data)
-                ]
-            ]);
-        } catch(ClientException $e) {
-            dd($e->getMessage());
-        }
-    }
+        $data = $this->client->post('/invoices/create', $invoiceData);
 
-    public function createInvoice(InvoiceDto $invoiceDto): CreateInvoiceResponse
-    {
-        $res = $this->post('/invoices/create', $invoiceDto->toArray());
+        if ($data['error'] !== 0) {
+            if ($data['error'] === 4) {
+                throw new \Exception('Missing require client data. Did you fill in the client name?');
+            }
 
-        if ($res->getStatusCode() !== 200) {
-            throw new \RuntimeException('Invoice was not created'); 
+            if ($data['error'] === 5) {
+                throw new \Exception('Posted data not correct. Did you pass any invoice items?');
+            }
+
+            throw new \Exception('Unknown exception with error code ' . $data['error']);
         }
 
-        $resData = json_decode($res->getBody()->getContents());
-
-        return new CreateInvoiceResponse(
-            $resData->error,
-            $resData->error_message,
-            $resData->data->Invoice->id,
-            $resData->data->Invoice->token,
-        );
+        return $data;
     }
 
     public function getPdfUrl(string $invoiceId, string $invoiceToken): string
     {
-        return $this->baseUrl() . "/invoices/pdf/{$invoiceId}/token:{$invoiceToken}";
+        return $this->client->baseUrl() . "/invoices/pdf/{$invoiceId}/token:{$invoiceToken}";
     }
 
     /**
      * The invoice is automatically marked as "sent via email" when
      * sending through their endopoint.
      */
-    public function sendInvoice(array $data): SendInvoiceResponse
-    {
-        $res = $this->post('/invoices/send', $data);
+    public function sendInvoiceViaMail(
+        int $invoiceId,
+        string $to,
+        array $bcc = [],
+        ?string $body = null,
+        array $cc = [],
+        ?Language $pdfLanguage = null,
+        ?string $subject = null,
+    ): array {
+        $data = $this->client->post('/invoices/send', [
+            'Email' => [
+                'invoice_id' => $invoiceId,
+                'to' => $to,
+                'bcc' => $bcc,
+                'body' => $body,
+                'cc' => $cc,
+                'pdf_language' => $pdfLanguage?->value,
+                'subject' => $subject,
+            ]
+        ]);
 
-        if ($res->getStatusCode() !== 200) {
-            throw new \RuntimeException('Invoice was not sent'); 
+        if ($data['error'] !== 0) {
+            if ($data['error'] === 4) {
+                throw new \Exception('Invoice not found.');
+            }
+
+            if ($data['error'] === 13) {
+                throw new \Exception('Entered receipient email address is not valid.');
+            }
+
+            throw new \Exception('Could not sent email. ' . $data['error_message'] ?? '');
         }
 
-        $resData = json_decode($res->getBody()->getContents());
-
-        return new SendInvoiceResponse(
-            $resData->error
-        );
+        return $data;
     }
 
-    public function markInvoiceAsSentByEmail(array $data): ResponseInterface
+    public function markInvoiceAsSentByEmail(int $invoiceId, ?string $email = null, ?string $subject = null, ?string $message = null): array
     {
-        return $this->post('/invoices/mark_as_sent', $data);
+        $data = $this->client->post('/invoices/mark_as_sent', [
+            'InvoiceEmail' => [
+                'invoice_id' => $invoiceId,
+                'email' => $email ?? '',
+                'subject' => $subject ?? '',
+                'message' => $message ?? '',
+            ]
+        ]);
+
+        if ($data['error'] !== 0) {
+            throw new \Exception($data['error_message'] ?? '');
+        }
+
+        return $data;
     }
 }
