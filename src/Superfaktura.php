@@ -49,7 +49,7 @@ class Superfaktura
     }
 
     /**
-     * The invoice is automatically marked as "sent via email" when
+     * NOTE: The invoice is automatically marked as "sent via email" when
      * sending through their endopoint.
      */
     public function sendInvoiceViaMail(
