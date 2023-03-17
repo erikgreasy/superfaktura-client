@@ -43,6 +43,16 @@ class Superfaktura
         return $data;
     }
 
+    /**
+     * Create new invoice instance in memory to populate with data and
+     * later save to SuperFaktura. This method is just a more fluent
+     * api for interacting with invoice.
+     */
+    public function newInvoice(): Invoice
+    {
+        return new Invoice($this);
+    }
+
     public function deleteInvoice(int $invoiceId): array
     {
         $data = $this->client->get("/invoices/delete/{$invoiceId}");
