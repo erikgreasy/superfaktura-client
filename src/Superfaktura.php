@@ -43,6 +43,17 @@ class Superfaktura
         return $data;
     }
 
+    public function deleteInvoice(int $invoiceId): array
+    {
+        $data = $this->client->get("/invoices/delete/{$invoiceId}");
+        
+        if ($data['error'] !== 0) {
+            throw new \Exception($data['message']);
+        }
+
+        return $data;
+    }
+
     public function getPdfUrl(string $invoiceId, string $invoiceToken): string
     {
         return $this->client->baseUrl() . "/invoices/pdf/{$invoiceId}/token:{$invoiceToken}";
